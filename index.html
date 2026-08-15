@@ -752,7 +752,15 @@ footer{margin-top:42px}
 </footer>
 
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
+
+/* ==============================
+   SUPABASE PRODUCT STORAGE
+============================== */
+const SUPABASE_URL = "https://okqhqnonefxildufshpx.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_yWFGV0_Ibak7V5LcoOZzLA_htwwpaJJ";
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /* ==============================
    PRODUCT DATA
@@ -760,19 +768,33 @@ footer{margin-top:42px}
 
 let products = [];
 
-try{
+async function loadProductsFromSupabase(){
+    try{
+        const { data, error } = await supabaseClient
+            .from("products")
+            .select("id, name, price, gender, category, sizes, images, created_at")
+            .order("created_at", { ascending: true });
 
-    products =
-        JSON.parse(
-            localStorage.getItem(
-                "patel_collection_products"
-            )
-        ) || [];
+        if(error) throw error;
 
-}catch(e){
+        products = (data || []).map(function(item){
+            return {
+                id: item.id,
+                name: item.name,
+                price: Number(item.price),
+                gender: item.gender,
+                category: item.category,
+                sizes: item.sizes || [],
+                images: item.images || []
+            };
+        });
 
-    products = [];
-
+        displayProducts();
+    }catch(error){
+        console.error("Supabase products load error:", error);
+        products = [];
+        displayProducts();
+    }
 }
 
 
@@ -1184,7 +1206,7 @@ function removeImage(index){
    ADD PRODUCT
 ============================== */
 
-function addProduct(){
+async function addProduct(){
 
     const name =
         document.getElementById(
@@ -1300,41 +1322,44 @@ function addProduct(){
     };
 
 
-    products.push(product);
-
+    const addButton = document.querySelector(".add-product");
+    if(addButton) addButton.disabled = true;
 
     try{
+        const { data, error } = await supabaseClient
+            .from("products")
+            .insert({
+                name: product.name,
+                price: product.price,
+                gender: product.gender,
+                category: product.category,
+                sizes: product.sizes,
+                images: product.images
+            })
+            .select("id, name, price, gender, category, sizes, images, created_at")
+            .single();
 
-        localStorage.setItem(
-            "patel_collection_products",
-            JSON.stringify(products)
-        );
+        if(error) throw error;
 
+        products.push({
+            id: data.id,
+            name: data.name,
+            price: Number(data.price),
+            gender: data.gender,
+            category: data.category,
+            sizes: data.sizes || [],
+            images: data.images || []
+        });
+
+        clearForm();
+        displayProducts();
+        showMessage("✅ Product successfully add ho gaya!", true);
+    }catch(error){
+        console.error("Supabase product add error:", error);
+        showMessage("❌ Product save nahi hua. Supabase table/policy check karo.", false);
+    }finally{
+        if(addButton) addButton.disabled = false;
     }
-
-    catch(error){
-
-        products.pop();
-
-        showMessage(
-            "❌ Storage full hai. Photo ka size chhota karke try karo.",
-            false
-        );
-
-        return;
-
-    }
-
-
-    clearForm();
-
-    displayProducts();
-
-
-    showMessage(
-        "✅ Product successfully add ho gaya!",
-        true
-    );
 
 }
 
@@ -1935,7 +1960,7 @@ Please confirm my order.`;
     DELETE
 ============================== */
 
-function deleteProduct(id){
+async function deleteProduct(id){
 
     // Sirf logged-in Admin product delete kar sakta hai
     if(sessionStorage.getItem("patel_admin_logged_in") !== "1"){
@@ -1953,23 +1978,24 @@ function deleteProduct(id){
     }
 
 
-    products =
-        products.filter(
-            function(product){
+    try{
+        const { error } = await supabaseClient
+            .from("products")
+            .delete()
+            .eq("id", id);
 
-                return product.id !== id;
+        if(error) throw error;
 
-            }
-        );
+        products = products.filter(function(product){
+            return product.id !== id;
+        });
 
-
-    localStorage.setItem(
-        "patel_collection_products",
-        JSON.stringify(products)
-    );
-
-
-    displayProducts();
+        displayProducts();
+        showMessage("✅ Product delete ho gaya!", true);
+    }catch(error){
+        console.error("Supabase product delete error:", error);
+        showMessage("❌ Product delete nahi hua.", false);
+    }
 
 }
 
@@ -2071,6 +2097,12 @@ function adminLogout(){
 
 displayProducts();
 
+
+
+/* ==============================
+   LOAD PRODUCTS FROM SUPABASE
+============================== */
+loadProductsFromSupabase();
 </script>
 
 </body>
